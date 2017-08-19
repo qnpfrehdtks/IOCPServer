@@ -7,6 +7,7 @@ BOOL Send(int ID, int size, char* packet);
 void packetClassify(unsigned char* buf, int buffSize, PACKET_KEY* packetState, int* ID, char* DataBuffer, int* outSize);
 char* packetProcess(PACKET_KEY key, int playerID, char Data[], int DataSize, int PlayerKey);
 void createPacketFrame(int size, PACKET_KEY PacketKey, int PlayerID, char* outbuffer);
+bool IsEnemyExit(cplayerData* enemyData, int playerID, int playerKey, int size);
 
 mutex mtx;
 
@@ -135,6 +136,7 @@ BOOL cNetworkManager::AcceptProcess()
 		if (m_clients[m_ClientIdx].clntSock == INVALID_SOCKET || m_clients[m_ClientIdx].clntSock == NULL)
 		{
 			printf("Clnt Sock is Connectless");
+
 			closesocket(m_clients[m_ClientIdx].clntSock);
 		}
 
@@ -260,7 +262,10 @@ unsigned int __stdcall CompletionThread(LPVOID pComPort)
 		if (BytesTransferred == 0 || FALSE == isSucce) {
 			printf("- Clinet Connect Exit -\n");
 			//delete PerIoData;
+		
 			NETWORKMANGER->CloseSocket(Key);
+			USERMANAGER->GetPlayerFromKey(Key)->SetClosed();
+			USERMANAGER->RemovePlayerFromKey(Key);
 			/*
 			클라이언트의 연결 종료시 처리를 해준다.
 			free 가 이해가 안된다면 동적할당을 배우고 오도록..
@@ -292,7 +297,7 @@ unsigned int __stdcall CompletionThread(LPVOID pComPort)
 					int pID; // 플레이어 ID
 					PACKET_KEY PacketKey;  // Packet의 key를 담을 변수
 					int size = sizeof(clnt.packet_buff); // 패킷의 사이즈 좀 알자.
-					char DataBuffer[3000] = { 0 };
+					char DataBuffer[6000] = { 0 };
 
 
 					int dataSize = 0; // 제대로 된 패킷 사이즈
@@ -302,7 +307,7 @@ unsigned int __stdcall CompletionThread(LPVOID pComPort)
 
 					// 들어온 패킷 이놈이 무슨 놈인지 알기 위해 처리하는 함수.
 					packetClassify(clnt.packet_buff, size, &PacketKey, &pID, DataBuffer, &dataSize);
-					printf("\n%d 사잊, \n", dataSize);
+				
 
 				    // 위에서 얻은 패킷 정보를 바탕으로 Data를 처리하자~~~
 					// 스레드간 동기화거 필요.
@@ -502,18 +507,25 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 		break;
 
 	case PK_PLAYER_READY:
+		user = USERMANAGER->getPlayer(playerID);
+		printf("%d 들어온 플레이어... ", playerID);
+		enemyData = user->GetMatchingPlayer();
 
 		// 저 ㄹㄷ 상태에요. 하고 표시
-		USERMANAGER->getPlayer(playerID)->SetReady(true);
+		user->SetReady(true);
 
-		if (USERMANAGER->getPlayer(playerID)->IsEnemyReady()) // 적도  Ready 상태인지 확인한다.
+		if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
+		{
+			return NULL;
+		}
+		else if (user->IsEnemyReady()) // 적도  Ready 상태인지 확인한다.
 		{
 			char* sendoutBuffer = new char[packetHeaderSize + PlayerSize];
 			char* tempBuffer;
 
 			createPacketFrame(packetHeaderSize + PlayerSize, PK_ENEMY_READY, playerID, sendoutBuffer);
 
-			cplayerData* enemyData = USERMANAGER->getPlayer(playerID)->GetMatchingPlayer();
+			//cplayerData* enemyData = user->GetMatchingPlayer();
 
 			tempBuffer = (char*)enemyData;
 			memcpy(sendoutBuffer + packetHeaderSize, tempBuffer, PlayerSize);
@@ -537,12 +549,15 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 	case PK_BATTLE_START:
 	
 			sendoutBuffer = new char[packetHeaderSize + PlayerSize];
-		
 			int m_Turn;
 		     user = USERMANAGER->getPlayer(playerID);
 			enemyData = user->GetMatchingPlayer();
 
-			if (user->checkOrder() == playerID )
+			if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
+			{
+				return NULL;
+			}
+			else if (user->checkOrder() == playerID )
 			{
 				user->SetTurn(true);
 				enemyData->SetTurn(false);
@@ -569,11 +584,17 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 
 		// 내가 적에게 공격을 한다!! 내 공격 포인트를 서버에 저장하고 적의 패킷을 기다리장...~
 	case PK_PLAYER_ATTACK:
-
 	//	sendoutBuffer = new char[packetHeaderSize];
 		 user = USERMANAGER->getPlayer(playerID);
 		 enemyData = user->GetMatchingPlayer();
 		 buffCurPos = 0;
+
+		 if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
+		 {
+			 return NULL;
+		 }
+
+		// checkISRemovePlayer(enemyData);
 
 		sPoint tempXY;
 
@@ -599,8 +620,14 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 		user = USERMANAGER->getPlayer(playerID);
 		enemyData = user->GetMatchingPlayer();
 
+	//	checkISRemovePlayer(enemyData);
+
+		if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
+		{
+			return NULL;
+		}
 		// 적이 공격을 성공했으니 또 적의 공격이 가능하다는 것을 명심.
-		if (!user->IsMyTurn()         // 적의 턴이고
+		else if (!user->IsMyTurn()         // 적의 턴이고
 			&& enemyData->IsMyTurn()    // 내턴이 아닌고
 			&& !enemyData->IsAttacking())   // 적이 공격할 그런 단계가 아닐때
 		{
@@ -628,7 +655,11 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 		user = USERMANAGER->getPlayer(playerID);
 		enemyData = user->GetMatchingPlayer();
 
-		if (!user->IsMyTurn() 
+		if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
+		{
+			return NULL;
+		}
+		else if (!user->IsMyTurn() 
 			&& enemyData->IsMyTurn()
 			&& !enemyData->IsAttacking())
 		{
@@ -658,15 +689,18 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 		user = USERMANAGER->getPlayer(playerID);
 		enemyData = user->GetMatchingPlayer();
         
+		if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
+		{
+			return NULL;
+		}
 
 		buffCurPos = 0;
-
 
 		memcpy(&skill, Data + buffCurPos, sizeof(int));
 		buffCurPos += 4;
 
 
-		sPoint tempXYs[100];
+		sPoint tempXYs[3000];
 
 		for (int i = 0; i < (DataSize - 4) / 8; i++)
 		{
@@ -693,46 +727,68 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 
 		// 턴을 클라에게 알려주는 경우다.
 	case PK_TURN_CHECK:
-		sendoutBuffer = new char[packetHeaderSize];
+		
 		user = USERMANAGER->getPlayer(playerID);
 		enemyData = user->GetMatchingPlayer();
-		printf("두번은 와야재\n");
-		if (!user->IsMyTurn() && enemyData->IsMyTurn())
+		sendoutBuffer = new char[packetHeaderSize];
+
+	//	checkISRemovePlayer(enemyData);
+		if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
 		{
-			printf("적의 턴이구용\n");
-			createPacketFrame(packetHeaderSize, PK_OPPO_TURN, playerID, sendoutBuffer);
+			return NULL;
+		}
+		// 적 둘다 패배하지 않은 경우
+		else if (!enemyData->IsDefeated() && !user->IsDefeated())
+		{
+			if (!user->IsMyTurn() && enemyData->IsMyTurn())
+			{
+			
+				createPacketFrame(packetHeaderSize, PK_OPPO_TURN, playerID, sendoutBuffer);
+
+				Send(PlayerKey, packetHeaderSize, sendoutBuffer);
+
+				delete[] sendoutBuffer;
+
+			}
+			else if (user->IsMyTurn() && !enemyData->IsMyTurn())
+			{
+				createPacketFrame(packetHeaderSize, PK_MY_TURN, playerID, sendoutBuffer);
+
+				Send(PlayerKey, packetHeaderSize, sendoutBuffer);
+
+				delete[] sendoutBuffer;
+			}
+		} // 적이 패배한 경우.
+		else if(!user->IsDefeated() && enemyData->IsDefeated())
+		{
+			printf("병신 ㅋㅋㅋ 졌네");
+			createPacketFrame(packetHeaderSize, PK_ENEMY_DIE, playerID, sendoutBuffer);
 
 			Send(PlayerKey, packetHeaderSize, sendoutBuffer);
 
 			delete[] sendoutBuffer;
-
 		}
-		else if (user->IsMyTurn() && !enemyData->IsMyTurn())
-		{
-			printf("나의 턴이구용\n");
-			createPacketFrame(packetHeaderSize, PK_MY_TURN, playerID, sendoutBuffer);
-
-			Send(PlayerKey, packetHeaderSize, sendoutBuffer);
-
-			delete[] sendoutBuffer;
-		}
-
 
 		break;
 
 	case PK_ENEMY_ATTACKWAIT:  // 적의 공격을 기다리는 우리 유저...
 		user = USERMANAGER->getPlayer(playerID);
 		enemyData = user->GetMatchingPlayer();
-
-		// 적이 공격 패킷이 이미 등록된 상황.
-		if (
+	//	checkISRemovePlayer(enemyData);
+		sendoutBuffer = new char[packetHeaderSize + PointSize];
+		if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
+		{
+			return NULL;
+		}
+		//// 적이 공격 패킷이 이미 등록된 상황.
+		else if (
 			enemyData->GetAttackType() == SK_BASE
 			&& enemyData->IsAttacking()  // 적이 공격할려는 중이고
 			&& enemyData->IsMyTurn()  // 적의 턴인 상태이고
 			&& !user->IsMyTurn()     // 유저의 턴이 아니다.
 			)
 		{
-			sendoutBuffer = new char[packetHeaderSize + PointSize];
+		//	sendoutBuffer = new char[packetHeaderSize + PointSize];
 			createPacketFrame(packetHeaderSize + PointSize, PK_ENEMY_ATTACK, playerID, sendoutBuffer);
 
 			// 둘다 공격 상태가 아닌 상태로 돌리자.
@@ -742,6 +798,7 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 			// 우리 플레이어도 공격을 기다리는 상태가 아닌걸로 바꾸고
 			user->SetAttackWait(false);
 
+			printf("%d %d 공격 햇다는 알려드림! \n", enemyData->GetAttkPoint().X, enemyData->GetAttkPoint().Y);
 			tempBuffer = (char*)&enemyData->GetAttkPoint();
 			memcpy(sendoutBuffer + packetHeaderSize, tempBuffer, PointSize);
 
@@ -758,7 +815,6 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 			&& !user->IsMyTurn()     // 유저의 턴이 아니다.
 			)
 		{
-			printf("아 행님 스킬 공격 이구만여");
 			sendoutBuffer = new char[packetHeaderSize + SkillTypeSize +enemyData->GetAttackSize()];
 			createPacketFrame(packetHeaderSize + SkillTypeSize + enemyData->GetAttackSize(), PK_ENEMY_SKILLATTACK, playerID, sendoutBuffer);
 
@@ -788,8 +844,8 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 			|| ( !enemyData->IsMyTurn() && user->IsMyTurn() )     // 유저의 턴인데 공격 오길 기다린다고?? 
 			)
 		{ 
-			printf("기다령;ㅁ\n");
-			//  유저야 그냥 공격을 기다려라....
+			// printf("기다령;ㅁ\n");
+			// 유저야 그냥 공격을 기다려라....
 			sendoutBuffer = new char[packetHeaderSize];
 			createPacketFrame(packetHeaderSize, PK_ENEMY_ATTACKWAIT, playerID, sendoutBuffer);
 
@@ -805,16 +861,24 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 
 	case PK_PLAYER_RADERRESULT:
 
-		sendoutBuffer = new char[packetHeaderSize + DataSize];
+		
 		user = USERMANAGER->getPlayer(playerID);
 		enemyData = user->GetMatchingPlayer();
 
-		if (!user->IsMyTurn()
+	//	checkISRemovePlayer(enemyData);
+
+		if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
+		{
+			return NULL;
+		}
+		else if (!user->IsMyTurn()
 			&& enemyData->IsMyTurn()
 			&& !enemyData->IsAttacking()
 			&& enemyData->GetAttackType() == SK_RADER
 			)
 		{
+			sendoutBuffer = new char[packetHeaderSize + DataSize];
+
 			int RaderResult = 0;
 			memcpy(&RaderResult, Data, sizeof(int));
 
@@ -842,19 +906,27 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 		break;
 
 	case PK_PLAYER_SKILLRESULT:
-
-		sendoutBuffer = new char[packetHeaderSize + DataSize];
 		user = USERMANAGER->getPlayer(playerID);
 		enemyData = user->GetMatchingPlayer();
 
-		if (!user->IsMyTurn()
+	
+		if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
+		{
+			return NULL;
+		}
+		else if (!user->IsMyTurn()
 			&& enemyData->IsMyTurn()
 			&& !enemyData->IsAttacking()
 			&& enemyData->GetAttackType() != SK_RADER
 			)
 		{
+			sendoutBuffer = new char[packetHeaderSize + DataSize];
+
+			printf(" 받은 사이즈 %d \n", DataSize );
+			buffCurPos = 0;
+
 			// 적에게 스킬 결과 통보
-			createPacketFrame(packetHeaderSize + (DataSize), PK_PLAYER_SKILLRESULT, enemyData->GetpID(), sendoutBuffer);
+			createPacketFrame(packetHeaderSize + (DataSize ), PK_PLAYER_SKILLRESULT, enemyData->GetpID(), sendoutBuffer);
 
 			tempBuffer = (char*)Data;
 			memcpy(sendoutBuffer + packetHeaderSize, tempBuffer, DataSize);
@@ -876,9 +948,52 @@ char* packetProcess(PACKET_KEY PacketKey, int playerID, char Data[], int DataSiz
 		}
 		break;
 
+	case PK_PLAYER_DIE:
+		user = USERMANAGER->getPlayer(playerID);
+		enemyData = user->GetMatchingPlayer();
+
+			printf("패배 마크 찍습니다.");
+			user->SetDefeate(true);
+			break;
+	case PK_PLAYER_MISSILEDEFNED:
+		user = USERMANAGER->getPlayer(playerID);
+		enemyData = user->GetMatchingPlayer();
+
+		//	checkISRemovePlayer(enemyData);
+
+		if (IsEnemyExit(enemyData, playerID, PlayerKey, packetHeaderSize))
+		{
+			return NULL;
+		}
+		// 적이 공격을 성공했으니 또 적의 공격이 가능하다는 것을 명심.
+		else if (!user->IsMyTurn()         // 적의 턴이고
+			&& enemyData->IsMyTurn()    // 내턴이 아닌고
+			&& !enemyData->IsAttacking())   // 적이 공격할 그런 단계가 아닐때
+		{
+			// 그럼 이제 적에게 공격을 막앗다고 보내보자
+			sendoutBuffer = new char[packetHeaderSize];
+			createPacketFrame(packetHeaderSize, PK_PLAYER_MISSILEDEFNED, enemyData->GetpID(), sendoutBuffer);
+
+			Send(enemyData->GetpKey(), packetHeaderSize, sendoutBuffer);
+
+			delete[] sendoutBuffer;
+
+			// 턴을 돌립시다... 방어 성공 ~
+			user->SetTurn(true);   // 이제 내 턴이고
+			enemyData->SetTurn(false);   //  적 턴이 아님.
+		}
+		else
+		{
+			printf(" 왜 내턴이 아닌데 공격을??");
+		}
+
+		break;
+
+
 	}
 	return NULL;
 }
+
 
 
 void cNetworkManager::ErrorHandling(char *message)
@@ -889,7 +1004,36 @@ void cNetworkManager::ErrorHandling(char *message)
 		exit(1);
 }
 
-	
+void SendPacket(int Size, PACKET_KEY packtKey, int Pid, char* buffer)
+{
+
+	createPacketFrame(Size, packtKey, Pid, buffer);
+
+	Send(packtKey, Size, buffer);
+
+}
+
+
+bool IsEnemyExit(cplayerData* enemyData, int playerID, int playerKey,int size)
+{
+	if (enemyData->IsExit())
+	{
+		char* sendoutBuffer = new char[size];
+
+		createPacketFrame(size, PK_ENEMY_EXIT, playerID, sendoutBuffer);
+		Send(playerKey, size, sendoutBuffer);
+
+	//    USERMANAGER->RemovePlayer(playerID);
+
+		delete[] sendoutBuffer;
+
+		return true;
+
+	}
+
+	return false;
+
+}
 
 
 

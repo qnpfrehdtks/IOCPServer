@@ -143,13 +143,49 @@ int cUserManager::matchingPlayer(cplayerData* player)
 }
 
 
-
-cplayerData * cUserManager::matchPlayer(cplayerData * Searchingplayer, cplayerData * Searchedplayer)
+cplayerData * cUserManager::GetPlayerFromKey(int PlayerKey)
 {
-	
-	return NULL;
+	for (unordered_map<int, cplayerData*>::iterator iter = m_mPlayer.begin();
+	iter != m_mPlayer.end();  iter++)
+	{
+		if ((*iter).second->GetpKey() == PlayerKey)
+		{
+			return (*iter).second;
+		}
+
+	}
+}
+
+void cUserManager::RemovePlayerFromKey(int Key)
+{
+	for (unordered_map<int, cplayerData*>::iterator iter = m_mPlayer.begin();
+	iter != m_mPlayer.end();  iter++)
+	{
+		if ((*iter).second->GetpKey() == Key)
+		{
+			RemovePlayer((*iter).second->GetpID());
+			return;
+		}
+
+	}
 
 }
+
+void cUserManager::RemovePlayer(int PlayerID)
+{
+	   delete getPlayer(PlayerID);
+	   m_mPlayer.erase(PlayerID);
+	    printf("%d Player Eixt :D 남은 플레이어 수 : %d\n", PlayerID, m_mPlayer.size());
+
+}
+
+
+//cplayerData * cUserManager::matchPlayer(cplayerData * Searchingplayer, cplayerData * Searchedplayer)
+//{
+//	
+//	return NULL;
+//
+//}
 
 cplayerData* cUserManager::getPlayer(INT pid)
 {
@@ -163,6 +199,7 @@ cplayerData* cUserManager::getAllPlayer()
 {
 	return NULL;
 }
+
 
 
 

@@ -4,7 +4,7 @@
 
 
 #define CLINET_MAX 1000
-#define BUFF_MAX 2000
+#define BUFF_MAX 3000
 
 using Packet = unsigned char;
 

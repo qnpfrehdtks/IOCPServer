@@ -34,21 +34,27 @@ private:
 	sPoint  m_AttackPt;
 
 	//공격 포인트는?
-	sPoint  m_AttackPts[25];
+	sPoint  m_AttackPts[100];
 
 	SKILL m_AttackType;
 	int m_AttackSize;
 	cplayerData* m_EnemyPlayer;
+	BOOL m_isDefeated;
+	BOOL m_isExit;
 
 public:
 	cplayerData(INT pID, INT Key) :
-		m_pID(pID), m_isWaiting(false), m_isMatched(false), m_Rating(0), m_pKey(Key), m_isGameReady(false), m_Order(0), m_isFirstClass(false), m_isMyTurn(false), m_isAttackWaiting(false), m_AttackSize(0)
+		m_pID(pID), m_isWaiting(false), m_isMatched(false), m_Rating(0), m_pKey(Key), m_isGameReady(false), m_Order(0), m_isFirstClass(false), m_isMyTurn(false), m_isAttackWaiting(false), m_AttackSize(0), m_isDefeated(false), m_isExit(false)
 	{
 		
 	}
 
-	~cplayerData();
+	~cplayerData()
+	{
+		//delete[] m_AttackPts;
+	}
 
+	BOOL IsExit()                                { return m_isExit; }
 	BOOL IsWaiting()                             { return m_isWaiting; }
 	BOOL IsMatched()                             { return m_isMatched; }
 	BOOL IsReady()                               { return m_isGameReady; }
@@ -57,22 +63,28 @@ public:
 	BOOL IsMyTurn()                              { return m_isMyTurn;  }
 	BOOL IsAttackedWaiting()                     { return m_isAttackWaiting; }
 	BOOL IsAttacking()                           { return m_isAttacking; }
+	BOOL IsDefeated()                            { return m_isDefeated; }
 
-	INT GetpID()                                 { return m_pID; }
-	int GetpKey()                                { return m_pKey; }
-	int GetRating()                              { return m_Rating; }
-	int GetOrder()                               { return m_Order;  }
-	sPoint GetAttkPoint()                        { return m_AttackPt; }
+	INT     GetpID()                                 { return m_pID; }
+	int     GetpKey()                                { return m_pKey; }
+	int     GetRating()                              { return m_Rating; }
+	int     GetOrder()                               { return m_Order;  }
+	sPoint  GetAttkPoint()                        { return m_AttackPt; }
 	sPoint* GetAttkPoints()                      { return m_AttackPts; }
-	SKILL GetAttackType()                        { return m_AttackType; }
-	int        GetAttackSize()                   { return m_AttackSize; }
+	SKILL   GetAttackType()                        { return m_AttackType; }
+	int     GetAttackSize()                   { return m_AttackSize; }
 
 
-	cplayerData* GetMatchingPlayer()             { return m_EnemyPlayer; }
+	cplayerData* GetMatchingPlayer()             {
+		if (m_EnemyPlayer) 
+			return m_EnemyPlayer;
+		return NULL;
+	}
 	int GetMatchingPlayerID()                    { return m_EnemyPlayer->GetpID(); }
 
 	
-
+	void SetClosed();
+	void SetDefeate(bool TF)                     { m_isDefeated = TF; }
 	void SetWaiting(bool TF)                     { m_isWaiting = TF; }
 	void SetMatched(bool TF)                     { m_isMatched = TF; }
 	void SetReady(bool TF)                       { m_isGameReady = TF; }

@@ -23,16 +23,26 @@ public:
 	cUserManager();
 	~cUserManager();
 
+
+	cplayerData* GetPlayerFromKey(int PlayerKey);
+	void RemovePlayerFromKey(int PlayerKey);
+	void RemovePlayer(int PlayerID);
+
 	int addPlayerData(INT pid, INT Key);
-	BOOL insertToWaitingRoom(cplayerData* player);
+	//BOOL insertToWaitingRoom(cplayerData* player);
 
 	BOOL matchingPlayer(cplayerData* player);
 	BOOL matchingPlayer(int playerID);
-	cplayerData* matchPlayer(cplayerData* Searchingplayer, cplayerData* Searchedplayer);
+
 
 
 	cplayerData* getPlayer(INT pid);
 	cplayerData* getAllPlayer();
+
+	//cplayerData* GetPlayerFromKey(int Key);
+
+
+
 
 };
 

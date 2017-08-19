@@ -3,8 +3,10 @@
 
 
 
-cplayerData::~cplayerData()
+void cplayerData::SetClosed()
 {
+	m_isDefeated = true;
+	m_isExit = true;
 }
 
 int cplayerData::checkOrder()
